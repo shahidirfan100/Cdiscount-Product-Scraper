@@ -1,0 +1,58 @@
+{
+    "title": "Cdiscount Product Scraper",
+    "description": "Extract product listings from Cdiscount search pages. Provide a Cdiscount search URL directly or a keyword to generate one.",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "startUrl": {
+            "title": "Start URL",
+            "type": "string",
+            "description": "Cdiscount search URL to scrape. If empty, the actor builds one from the keyword.",
+            "editor": "textfield",
+            "prefill": "https://www.cdiscount.com/search/10/chair.html"
+        },
+        "keyword": {
+            "title": "Keyword",
+            "type": "string",
+            "description": "Keyword used to build search URL when Start URL is empty.",
+            "editor": "textfield",
+            "prefill": "chair"
+        },
+        "results_wanted": {
+            "title": "Maximum number of products",
+            "type": "integer",
+            "description": "Maximum number of products to save.",
+            "minimum": 1,
+            "default": 20,
+            "prefill": 20,
+            "editor": "number"
+        },
+        "max_pages": {
+            "title": "Maximum number of pages",
+            "type": "integer",
+            "description": "Safety cap for number of search pages to process.",
+            "minimum": 1,
+            "default": 10,
+            "prefill": 3,
+            "editor": "number"
+        },
+        "includeSponsored": {
+            "title": "Include sponsored products",
+            "type": "boolean",
+            "description": "Include sponsored brand offers when available.",
+            "editor": "checkbox",
+            "default": true
+        },
+        "proxyConfiguration": {
+            "title": "Proxy configuration",
+            "type": "object",
+            "description": "Optional proxy settings.",
+            "editor": "proxy",
+            "default": {
+                "useApifyProxy": false
+            }
+        }
+    },
+    "required": [],
+    "additionalProperties": false
+}
