@@ -1,10 +1,29 @@
-import vm from 'node:vm';
 import { Actor, log } from 'apify';
-import { Dataset } from 'crawlee';
-import { gotScraping } from 'got-scraping';
+import { Dataset, PlaywrightCrawler } from 'crawlee';
+import { firefox } from 'playwright';
 
 const DEFAULT_START_URL = 'https://www.cdiscount.com/search/10/chair.html';
-const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+const USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/147.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 15.7; rv:147.0) Gecko/20100101 Firefox/147.0',
+    'Mozilla/5.0 (X11; Linux x86_64; rv:147.0) Gecko/20100101 Firefox/147.0',
+];
+const BLOCKED_RESOURCE_TYPES = new Set(['image', 'font', 'media', 'stylesheet']);
+const BLOCKED_URL_PATTERNS = [
+    'abtasty',
+    'api-data-connector.abtasty.com',
+    'cdn.trustcommander.net',
+    'cdtm.cdiscount.com',
+    'dcinfos-cache.abtasty.com',
+    'dm-event.net',
+    'google-analytics',
+    'googletagmanager',
+    'doubleclick',
+    'facebook',
+    'adsense',
+    'cdn-cgi/rum',
+];
+const MAX_PARALLEL_PAGES = 4;
 
 await Actor.init();
 
@@ -22,70 +41,182 @@ try {
     const resultsWanted = Number.isFinite(Number(resultsWantedRaw)) ? Math.max(1, Number(resultsWantedRaw)) : 20;
     const maxPages = Number.isFinite(Number(maxPagesRaw)) ? Math.max(1, Number(maxPagesRaw)) : 10;
     const initialUrl = buildInitialSearchUrl(startUrl, keyword);
-
     const proxyConfig = proxyConfiguration ? await Actor.createProxyConfiguration(proxyConfiguration) : undefined;
-    const proxyUrl = proxyConfig ? await proxyConfig.newUrl() : undefined;
-    const session = {
-        cookieHeader: '',
-        proxyUrl,
-        userAgent: DEFAULT_USER_AGENT,
+    const targetConcurrency = calculateTargetConcurrency(resultsWanted, maxPages);
+    const crawlState = {
+        seen: new Set(),
+        enqueued: new Set(),
+        completedPages: new Set(),
+        highestScheduledPage: 1,
+        totalSaved: 0,
+        totalPages: Number.MAX_SAFE_INTEGER,
     };
 
-    const seen = new Set();
-    let totalSaved = 0;
-    let page = 1;
-    let totalPages = Number.MAX_SAFE_INTEGER;
+    const crawler = new PlaywrightCrawler({
+        proxyConfiguration: proxyConfig,
+        launchContext: {
+            launcher: firefox,
+            launchOptions: {
+                headless: true,
+            },
+            userAgent: getRandomUserAgent(),
+        },
+        maxConcurrency: targetConcurrency,
+        maxRequestRetries: 1,
+        navigationTimeoutSecs: 45,
+        requestHandlerTimeoutSecs: 60,
+        useSessionPool: true,
+        sessionPoolOptions: {
+            maxPoolSize: 8,
+            sessionOptions: {
+                maxUsageCount: 20,
+                maxErrorScore: 2,
+            },
+        },
+        preNavigationHooks: [
+            async ({ page, request }, gotoOptions) => {
+                Object.assign(gotoOptions, {
+                    waitUntil: 'domcontentloaded',
+                    timeout: 90000,
+                });
 
-    while (totalSaved < resultsWanted && page <= maxPages && page <= totalPages) {
-        const pageUrl = buildPageUrl(initialUrl, page);
-        const html = await fetchProtectedHtml(pageUrl, session);
-        const lplrData = extractLplrData(html);
+                await page.route('**/*', (route) => {
+                    const resourceType = route.request().resourceType();
+                    const resourceUrl = route.request().url();
 
-        if (!lplrData) {
-            log.warning(`No LPLR data found on ${pageUrl}. Stopping.`);
-            break;
-        }
+                    if (BLOCKED_RESOURCE_TYPES.has(resourceType)
+                        || BLOCKED_URL_PATTERNS.some((pattern) => resourceUrl.includes(pattern))) {
+                        return route.abort();
+                    }
 
-        totalPages = Number.isFinite(Number(lplrData.totalPageCount)) ? Number(lplrData.totalPageCount) : totalPages;
-        const offers = collectOffers(lplrData, includeSponsored);
+                    return route.continue();
+                });
 
-        if (!offers.length) {
-            log.info(`No offers found on page ${page}. Stopping.`);
-            break;
-        }
+                await page.setExtraHTTPHeaders({
+                    'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+                    referer: 'https://www.cdiscount.com/',
+                });
 
-        const batch = [];
+                await page.addInitScript(() => {
+                    Object.defineProperty(navigator, 'webdriver', {
+                        get: () => undefined,
+                    });
+                });
 
-        for (let index = 0; index < offers.length; index++) {
-            if (totalSaved + batch.length >= resultsWanted) break;
+                log.info(`Navigating page ${request.userData.page || 1}: ${request.url}`);
+            },
+        ],
+        requestHandler: async ({ page, request, session }) => {
+            if (crawlState.totalSaved >= resultsWanted) return;
 
-            const offer = offers[index];
-            const record = mapOfferToRecord(offer, lplrData, page, index);
-            const uniqueKey = String(record.offerId || record.productId || record.productUrl || `${page}-${index}`);
+            const currentPage = request.userData.page || 1;
 
-            if (seen.has(uniqueKey)) continue;
-            seen.add(uniqueKey);
-            batch.push(record);
-        }
+            const lplrData = await waitForLplrData(page);
 
-        if (batch.length > 0) {
-            await Dataset.pushData(batch);
-            totalSaved += batch.length;
-        }
+            if (!lplrData) {
+                const pageTitle = await page.title().catch(() => '');
+                log.warning(`No LPLR data on page ${currentPage}. Title: ${pageTitle}`);
+                session?.markBad();
+                return;
+            }
 
-        log.info(`Processed page ${page}/${Math.min(totalPages, maxPages)}. Saved ${batch.length} items (total: ${totalSaved}/${resultsWanted}).`);
-        page++;
-    }
+            crawlState.totalPages = Number.isFinite(Number(lplrData.totalPageCount))
+                ? Number(lplrData.totalPageCount)
+                : crawlState.totalPages;
 
-    log.info(`Finished. Saved ${totalSaved} items.`);
+            const offers = collectOffers(lplrData, includeSponsored);
+            if (!offers.length) {
+                log.info(`No offers found on page ${currentPage}. Stopping.`);
+                return;
+            }
+
+            const batch = [];
+
+            for (let index = 0; index < offers.length; index++) {
+                if (crawlState.totalSaved + batch.length >= resultsWanted) break;
+
+                const offer = offers[index];
+                const record = mapOfferToRecord(offer, lplrData, currentPage, index);
+                const uniqueKey = String(record.offerId || record.productId || record.productUrl || `${currentPage}-${index}`);
+
+                if (crawlState.seen.has(uniqueKey)) continue;
+                crawlState.seen.add(uniqueKey);
+                batch.push(record);
+            }
+
+            if (batch.length > 0) {
+                await Dataset.pushData(batch);
+                crawlState.totalSaved += batch.length;
+            }
+            crawlState.completedPages.add(currentPage);
+
+            log.info(`Processed page ${currentPage}/${Math.min(crawlState.totalPages, maxPages)}. Saved ${batch.length} items (total: ${crawlState.totalSaved}/${resultsWanted}).`);
+
+            if (crawlState.totalSaved >= resultsWanted) return;
+
+            if (currentPage === 1) {
+                const firstPageYield = Math.max(1, batch.length);
+                const estimatedPagesNeeded = Math.ceil(resultsWanted / firstPageYield);
+                await enqueuePagesThrough({
+                    crawler,
+                    initialUrl,
+                    crawlState,
+                    endPage: Math.min(maxPages, crawlState.totalPages, estimatedPagesNeeded),
+                });
+            }
+
+            const averagePageYield = Math.max(
+                1,
+                Math.floor(crawlState.totalSaved / crawlState.completedPages.size),
+            );
+            const estimatedTotalPagesNeeded = Math.ceil(resultsWanted / averagePageYield);
+            const desiredHighestPage = Math.min(
+                maxPages,
+                crawlState.totalPages,
+                estimatedTotalPagesNeeded,
+            );
+
+            await enqueuePagesThrough({
+                crawler,
+                initialUrl,
+                crawlState,
+                endPage: desiredHighestPage,
+            });
+        },
+        failedRequestHandler: async ({ request }, error) => {
+            log.error(`Failed request: ${request.url}`, { error: error.message });
+        },
+    });
+
+    const firstUrl = buildPageUrl(initialUrl, 1);
+    crawlState.enqueued.add(firstUrl);
+    await crawler.run([{
+        url: firstUrl,
+        userData: { page: 1 },
+    }]);
+
+    log.info(`Finished. Saved ${crawlState.totalSaved} items.`);
 } finally {
     await Actor.exit();
+}
+
+function getRandomUserAgent() {
+    return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+function calculateTargetConcurrency(resultsWanted, maxPages) {
+    if (resultsWanted <= 60) return 1;
+    if (resultsWanted <= 120) return Math.min(2, maxPages, MAX_PARALLEL_PAGES);
+    if (resultsWanted <= 240) return Math.min(3, maxPages, MAX_PARALLEL_PAGES);
+    return Math.min(MAX_PARALLEL_PAGES, maxPages);
 }
 
 function buildInitialSearchUrl(startUrl, keyword) {
     if (startUrl && typeof startUrl === 'string') return startUrl;
     const sanitizedKeyword = String(keyword || '').trim().replace(/\s+/g, '+');
-    return sanitizedKeyword ? `https://www.cdiscount.com/search/10/${encodeURIComponent(sanitizedKeyword).replace(/%2B/g, '+')}.html` : DEFAULT_START_URL;
+    return sanitizedKeyword
+        ? `https://www.cdiscount.com/search/10/${encodeURIComponent(sanitizedKeyword).replace(/%2B/g, '+')}.html`
+        : DEFAULT_START_URL;
 }
 
 function buildPageUrl(url, page) {
@@ -94,84 +225,45 @@ function buildPageUrl(url, page) {
     return parsed.toString();
 }
 
-function getBaseHeaders(userAgent, cookieHeader) {
-    const headers = {
-        'accept-language': 'fr-FR,fr;q=0.9,en;q=0.8',
-        'user-agent': userAgent,
-        'referer': 'https://www.cdiscount.com/',
-    };
-    if (cookieHeader) headers.cookie = cookieHeader;
-    return headers;
-}
+async function enqueuePagesThrough({ crawler, initialUrl, crawlState, endPage }) {
+    if (endPage <= crawlState.highestScheduledPage) return;
 
-async function fetchProtectedHtml(url, session) {
-    if (!session.cookieHeader) {
-        session.cookieHeader = await getChallengeCookie(url, session);
-    }
+    const requests = [];
+    for (let pageNumber = crawlState.highestScheduledPage + 1; pageNumber <= endPage; pageNumber++) {
+        const pageUrl = buildPageUrl(initialUrl, pageNumber);
+        if (crawlState.enqueued.has(pageUrl)) continue;
 
-    let response = await gotScraping({
-        url,
-        proxyUrl: session.proxyUrl,
-        headers: getBaseHeaders(session.userAgent, session.cookieHeader),
-        timeout: { request: 60000 },
-        retry: { limit: 2 },
-    });
-
-    if (isChallengePage(response.body)) {
-        log.warning(`Challenge detected for ${url}. Refreshing challenge cookie.`);
-        session.cookieHeader = extractChallengeCookie(response.body) || await getChallengeCookie(url, session);
-        response = await gotScraping({
-            url,
-            proxyUrl: session.proxyUrl,
-            headers: getBaseHeaders(session.userAgent, session.cookieHeader),
-            timeout: { request: 60000 },
-            retry: { limit: 2 },
+        crawlState.enqueued.add(pageUrl);
+        requests.push({
+            url: pageUrl,
+            userData: { page: pageNumber },
         });
     }
 
-    if (isChallengePage(response.body)) {
-        throw new Error(`Cdiscount challenge could not be solved for ${url}`);
+    if (requests.length === 0) return;
+
+    const nextHighestScheduledPage = Math.max(crawlState.highestScheduledPage, endPage);
+    Object.assign(crawlState, {
+        highestScheduledPage: nextHighestScheduledPage,
+    });
+    await crawler.addRequests(requests);
+}
+
+async function waitForLplrData(page) {
+    try {
+        await page.waitForFunction(() => Boolean(
+            window.LPLR_PRELOADED_STATE?.reactQueryState?.queries?.length,
+        ), { timeout: 30000 });
+    } catch {
+        return null;
     }
 
-    return response.body;
-}
-
-async function getChallengeCookie(url, session) {
-    const response = await gotScraping({
-        url,
-        proxyUrl: session.proxyUrl,
-        headers: getBaseHeaders(session.userAgent, ''),
-        timeout: { request: 60000 },
-        retry: { limit: 2 },
+    return page.evaluate(() => {
+        const state = window.LPLR_PRELOADED_STATE;
+        return state?.reactQueryState?.queries?.find((query) => query?.queryKey?.[0] === 'getLplr')?.state?.data
+            || state?.reactQueryState?.queries?.[0]?.state?.data
+            || null;
     });
-
-    const cookie = extractChallengeCookie(response.body);
-    if (!cookie) throw new Error('Challenge cookie not found in Cdiscount response.');
-    return cookie;
-}
-
-function extractChallengeCookie(body) {
-    const nameMatch = body.match(/"name":"([^"]+)"/);
-    const valueMatch = body.match(/"value":"([^"]+)"/);
-    if (!nameMatch || !valueMatch) return '';
-    return `${nameMatch[1]}=${valueMatch[1]}`;
-}
-
-function isChallengePage(html) {
-    return html.includes('__blnChallengeStore') && html.includes('challengejs');
-}
-
-function extractLplrData(html) {
-    const scriptMatch = html.match(/<script>\s*LPLR_PRELOADED_STATE\s*=\s*JSON\.parse\([\s\S]*?<\/script>/);
-    if (!scriptMatch) return null;
-
-    const scriptContent = scriptMatch[0].replace(/^<script>/, '').replace(/<\/script>$/, '');
-    const sandbox = { JSON, LPLR_PRELOADED_STATE: undefined };
-    vm.createContext(sandbox);
-    vm.runInContext(scriptContent, sandbox, { timeout: 5000 });
-
-    const state = sandbox.LPLR_PRELOADED_STATE;
-    return state?.reactQueryState?.queries?.find((query) => query?.queryKey?.[0] === 'getLplr')?.state?.data || null;
 }
 
 function collectOffers(lplrData, includeSponsored) {
@@ -191,7 +283,11 @@ function collectOffers(lplrData, includeSponsored) {
 
     if (includeSponsored) {
         for (const campaign of lplrData.sponsoredBrand?.campaigns || []) {
-            for (const offer of campaign.offers || []) add({ ...offer, isSponsorised: true, sponsoredCampaignId: campaign.campaignId });
+            for (const offer of campaign.offers || []) add({
+                ...offer,
+                isSponsorised: true,
+                sponsoredCampaignId: campaign.campaignId,
+            });
         }
     }
 
@@ -199,7 +295,7 @@ function collectOffers(lplrData, includeSponsored) {
 }
 
 function mapOfferToRecord(offer, lplrData, page, index) {
-    const normalizedMedia = Array.isArray(offer.media) ? offer.media.map(normalizeMedia).filter(Boolean) : [];
+    const normalizedMedia = dedupeMedia(Array.isArray(offer.media) ? offer.media.map(normalizeMedia).filter(Boolean) : []);
     const firstMedia = normalizedMedia[0] || {};
 
     const record = {
@@ -262,6 +358,21 @@ function normalizeMedia(media) {
         height: media.height,
         thumbnailUrl: toAbsoluteUrl(media.thumbnail?.url),
     });
+}
+
+function dedupeMedia(mediaItems) {
+    const unique = [];
+    const seen = new Set();
+
+    for (const media of mediaItems) {
+        if (!media) continue;
+        const key = `${media.src || ''}|${media.thumbnailUrl || ''}|${media.alt || ''}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        unique.push(media);
+    }
+
+    return unique;
 }
 
 function normalizeBulletPoints(bulletPoints) {

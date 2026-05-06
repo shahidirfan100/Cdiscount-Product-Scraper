@@ -1,2 +1,5 @@
 /node_modules
 /storage
+/.playwright-mcp
+/run.log
+package-lock.json
