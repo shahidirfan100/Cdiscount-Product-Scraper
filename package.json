@@ -4,11 +4,10 @@
   "description": "Apify actor for extracting Cdiscount product listings from search pages.",
   "type": "module",
   "dependencies": {
-    "apify": "^3.7.0",
+    "apify": "^3.7.2",
     "cheerio": "^1.2.0",
     "content-type": "^1.0.5",
-    "crawlee": "^3.16.0",
-    "got-scraping": "^4.2.1",
+    "crawlee": "^3.18.1",
     "playwright": "1.59.1"
   },
   "scripts": {
