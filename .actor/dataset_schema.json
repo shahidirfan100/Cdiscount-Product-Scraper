@@ -1,164 +1,164 @@
 {
-  "actorSpecification": 1,
-  "fields": {
-    "offerId": {
-      "title": "Offer ID",
-      "type": "integer",
-      "description": "Unique offer identifier."
-    },
-    "productId": {
-      "title": "Product ID",
-      "type": "string",
-      "description": "Product identifier."
-    },
-    "productName": {
-      "title": "Product Name",
-      "type": "string",
-      "description": "Product listing title."
-    },
-    "productUrl": {
-      "title": "Product URL",
-      "type": "string",
-      "description": "Absolute URL to the product page."
-    },
-    "price": {
-      "title": "Price",
-      "type": "number",
-      "description": "Current product price."
-    },
-    "strikedPrice": {
-      "title": "Striked Price",
-      "type": "number",
-      "description": "Reference or previous price when available."
-    },
-    "averageOverallRating": {
-      "title": "Average Rating",
-      "type": "number",
-      "description": "Average customer rating."
-    },
-    "ratingCount": {
-      "title": "Rating Count",
-      "type": "integer",
-      "description": "Number of ratings."
-    },
-    "sellerName": {
-      "title": "Seller Name",
-      "type": "string",
-      "description": "Name of the seller."
-    },
-    "isSponsored": {
-      "title": "Is Sponsored",
-      "type": "boolean",
-      "description": "True when the offer is sponsored."
-    },
-    "imageUrl": {
-      "title": "Image URL",
-      "type": "string",
-      "description": "Main product image URL."
-    },
-    "page": {
-      "title": "Page",
-      "type": "integer",
-      "description": "Search result page number."
-    },
-    "rankOnPage": {
-      "title": "Rank On Page",
-      "type": "integer",
-      "description": "Position on the page."
-    },
-    "searchWord": {
-      "title": "Search Word",
-      "type": "string",
-      "description": "Search term used by Cdiscount."
-    },
-    "fetchedAt": {
-      "title": "Fetched At",
-      "type": "string",
-      "description": "ISO timestamp when the item was extracted."
-    }
-  },
-  "views": {
-    "overview": {
-      "title": "Overview",
-      "transformation": {
-        "fields": [
-          "offerId",
-          "productId",
-          "productName",
-          "price",
-          "strikedPrice",
-          "averageOverallRating",
-          "ratingCount",
-          "sellerName",
-          "isSponsored",
-          "productUrl",
-          "imageUrl",
-          "page",
-          "rankOnPage",
-          "searchWord"
-        ]
-      },
-      "display": {
-        "component": "table",
-        "properties": {
-          "offerId": {
-            "label": "Offer ID",
-            "format": "number"
-          },
-          "productId": {
-            "label": "Product ID",
-            "format": "text"
-          },
-          "productName": {
-            "label": "Product",
-            "format": "text"
-          },
-          "price": {
-            "label": "Price",
-            "format": "number"
-          },
-          "strikedPrice": {
-            "label": "Striked Price",
-            "format": "number"
-          },
-          "averageOverallRating": {
-            "label": "Rating",
-            "format": "number"
-          },
-          "ratingCount": {
-            "label": "Ratings",
-            "format": "number"
-          },
-          "sellerName": {
-            "label": "Seller",
-            "format": "text"
-          },
-          "isSponsored": {
-            "label": "Sponsored",
-            "format": "text"
-          },
-          "productUrl": {
-            "label": "URL",
-            "format": "link"
-          },
-          "imageUrl": {
-            "label": "Image",
-            "format": "image"
-          },
-          "page": {
-            "label": "Page",
-            "format": "number"
-          },
-          "rankOnPage": {
-            "label": "Rank",
-            "format": "number"
-          },
-          "searchWord": {
-            "label": "Search",
-            "format": "text"
-          }
+    "actorSpecification": 1,
+    "fields": {
+        "offerId": {
+            "title": "Offer ID",
+            "type": "integer",
+            "description": "Unique offer identifier."
+        },
+        "productId": {
+            "title": "Product ID",
+            "type": "string",
+            "description": "Product identifier."
+        },
+        "productName": {
+            "title": "Product Name",
+            "type": "string",
+            "description": "Product listing title."
+        },
+        "productUrl": {
+            "title": "Product URL",
+            "type": "string",
+            "description": "Absolute URL to the product page."
+        },
+        "price": {
+            "title": "Price",
+            "type": "number",
+            "description": "Current product price."
+        },
+        "strikedPrice": {
+            "title": "Striked Price",
+            "type": "number",
+            "description": "Reference or previous price when available."
+        },
+        "averageOverallRating": {
+            "title": "Average Rating",
+            "type": "number",
+            "description": "Average customer rating."
+        },
+        "ratingCount": {
+            "title": "Rating Count",
+            "type": "integer",
+            "description": "Number of ratings."
+        },
+        "sellerName": {
+            "title": "Seller Name",
+            "type": "string",
+            "description": "Name of the seller."
+        },
+        "isSponsored": {
+            "title": "Is Sponsored",
+            "type": "boolean",
+            "description": "True when the offer is sponsored."
+        },
+        "imageUrl": {
+            "title": "Image URL",
+            "type": "string",
+            "description": "Main product image URL."
+        },
+        "page": {
+            "title": "Page",
+            "type": "integer",
+            "description": "Search result page number."
+        },
+        "rankOnPage": {
+            "title": "Rank On Page",
+            "type": "integer",
+            "description": "Position on the page."
+        },
+        "searchWord": {
+            "title": "Search Word",
+            "type": "string",
+            "description": "Search term used by Cdiscount."
+        },
+        "fetchedAt": {
+            "title": "Fetched At",
+            "type": "string",
+            "description": "ISO timestamp when the item was extracted."
         }
-      }
+    },
+    "views": {
+        "overview": {
+            "title": "Overview",
+            "transformation": {
+                "fields": [
+                    "offerId",
+                    "productId",
+                    "productName",
+                    "price",
+                    "strikedPrice",
+                    "averageOverallRating",
+                    "ratingCount",
+                    "sellerName",
+                    "isSponsored",
+                    "productUrl",
+                    "imageUrl",
+                    "page",
+                    "rankOnPage",
+                    "searchWord"
+                ]
+            },
+            "display": {
+                "component": "table",
+                "properties": {
+                    "offerId": {
+                        "label": "Offer ID",
+                        "format": "number"
+                    },
+                    "productId": {
+                        "label": "Product ID",
+                        "format": "text"
+                    },
+                    "productName": {
+                        "label": "Product",
+                        "format": "text"
+                    },
+                    "price": {
+                        "label": "Price",
+                        "format": "number"
+                    },
+                    "strikedPrice": {
+                        "label": "Striked Price",
+                        "format": "number"
+                    },
+                    "averageOverallRating": {
+                        "label": "Rating",
+                        "format": "number"
+                    },
+                    "ratingCount": {
+                        "label": "Ratings",
+                        "format": "number"
+                    },
+                    "sellerName": {
+                        "label": "Seller",
+                        "format": "text"
+                    },
+                    "isSponsored": {
+                        "label": "Sponsored",
+                        "format": "text"
+                    },
+                    "productUrl": {
+                        "label": "URL",
+                        "format": "link"
+                    },
+                    "imageUrl": {
+                        "label": "Image",
+                        "format": "image"
+                    },
+                    "page": {
+                        "label": "Page",
+                        "format": "number"
+                    },
+                    "rankOnPage": {
+                        "label": "Rank",
+                        "format": "number"
+                    },
+                    "searchWord": {
+                        "label": "Search",
+                        "format": "text"
+                    }
+                }
+            }
+        }
     }
-  }
 }

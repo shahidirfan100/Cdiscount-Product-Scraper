@@ -1,7 +1,6 @@
 {
-  "startUrl": "https://www.cdiscount.com/search/10/chair.html",
-  "keyword": "chair",
-  "results_wanted": 20,
-  "max_pages": 3,
-  "includeSponsored": true
+    "keyword": "chair",
+    "results_wanted": 20,
+    "max_pages": 3,
+    "includeSponsored": true
 }

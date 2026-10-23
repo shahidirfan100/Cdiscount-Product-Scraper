@@ -1,21 +1,21 @@
 {
     "title": "Cdiscount Product Scraper",
-    "description": "Extract product listings from Cdiscount search pages. Provide a Cdiscount search URL directly or a keyword to generate one.",
+    "description": "Extract product listings from Cdiscount search pages. Provide a Cdiscount search URL or a keyword.",
     "type": "object",
     "schemaVersion": 1,
     "properties": {
         "startUrl": {
             "title": "Start URL",
             "type": "string",
-            "description": "Cdiscount search URL to scrape. If empty, the actor builds one from the keyword.",
-            "editor": "textfield",
-            "prefill": "https://www.cdiscount.com/search/10/chair.html"
+            "description": "Cdiscount search URL to scrape. Takes precedence over Keyword when supplied.",
+            "editor": "textfield"
         },
         "keyword": {
             "title": "Keyword",
             "type": "string",
-            "description": "Keyword used to build search URL when Start URL is empty.",
+            "description": "Search keyword used only when Start URL is empty. Ignored when Start URL is supplied.",
             "editor": "textfield",
+            "default": "chair",
             "prefill": "chair"
         },
         "results_wanted": {
@@ -24,7 +24,6 @@
             "description": "Maximum number of products to save.",
             "minimum": 1,
             "default": 20,
-            "prefill": 20,
             "editor": "number"
         },
         "max_pages": {
@@ -33,7 +32,6 @@
             "description": "Safety cap for number of search pages to process.",
             "minimum": 1,
             "default": 10,
-            "prefill": 3,
             "editor": "number"
         },
         "includeSponsored": {
@@ -46,7 +44,7 @@
         "proxyConfiguration": {
             "title": "Proxy configuration",
             "type": "object",
-            "description": "Optional proxy settings.",
+            "description": "Optional proxy settings. No proxy is used by default.",
             "editor": "proxy",
             "default": {
                 "useApifyProxy": false
